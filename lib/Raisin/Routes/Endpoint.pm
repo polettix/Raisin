@@ -98,8 +98,13 @@ sub match {
 
     foreach my $p (@{ $self->params }) {
         next unless $p->named;
-        my $copy = $captured{ $p->name };
-        return unless $p->validate(\$copy, 'quite');
+        my $name = $p->name;
+        my %args = (quiet => 1);
+        if (exists $captured{$name}) {
+            my $copy = $captured{$name};
+            $args{ref_value} = \$copy;
+        }
+        return unless $p->validate(%args);
     }
 
     $self->named(\%captured);

@@ -9,6 +9,7 @@ use Plack::Util::Accessor qw(
     required
 
     default
+    has_default
     desc
     enclosed
     name
@@ -37,7 +38,9 @@ sub new {
 sub _parse {
     my ($self, $spec) = @_;
 
+    my $has_default = exists $spec->{default} ? 1 : 0;
     $self->{$_} = $spec->{$_} for @ATTRIBUTES;
+    $self->{has_default} = $has_default;
 
     if ($spec->{in}) {
         return unless $self->in($spec->{in});
@@ -97,20 +100,28 @@ sub in {
 }
 
 sub validate {
-    my ($self, $ref_value, $quiet) = @_;
+    my $self = shift;
+    my %args = @_ && ref($_[0]) ? (
+            ref_value => $_[0],
+            quiet     => $_[1],
+        ) : @_;
+    my $quiet = $args{quiet};
 
-    # Required and empty
-    # Only optional parameters can have default value
-    if ($self->required && !defined($$ref_value)) {
-        Raisin::log(warn => '`%s` is required', $self->name) unless $quiet;
-        return;
+    if (! exists $args{ref_value}) { # no value provided
+        # Required and empty
+        # Only optional parameters can have default value
+        if ($self->required) {
+            Raisin::log(warn => '`%s` is required', $self->name) unless $quiet;
+            return;
+        }
+        else {
+            Raisin::log(info => '`%s` optional and empty', $self->name);
+            return 1;
+        }
     }
 
-    # Optional and empty
-    if (!$self->required && !defined($$ref_value)) {
-        Raisin::log(info => '`%s` optional and empty', $self->name);
-        return 1;
-    }
+    # here we got a real ref_value
+    my $ref_value = $args{ref_value};
 
     # Type check
     eval {
@@ -137,12 +148,18 @@ sub validate {
     if ($self->type->name eq 'HashRef' && $self->enclosed) {
         for my $p (@{ $self->enclosed }) {
             my $v = $$ref_value;
+            my %v = (ref_value => \$v);
 
             if ($self->type->name eq 'HashRef') {
-                $v = $v->{ $p->name };
+                if (exists $v->{ $p->name }) {
+                    $v = $v->{ $p->name };
+                }
+                else { # nothing to validate
+                    %v = ();
+                }
             }
 
-            return unless $p->validate(\$v, $quiet);
+            return unless $p->validate(%v, quiet => $quiet);
         }
     }
     # Regex
@@ -213,9 +230,37 @@ Returns the location of the parameter: B<query, header, path, formData, body>.
 
 =head3 validate
 
-Process and validate parameter. Takes B<reference> as the input paramter.
+Process and validate parameter. Can be invoked as follows:
 
     $p->validate(\$value);
+    $p->validate(\$value, $quiet);
+    $p->validate(%args);
+
+In the first and second cases, the first parameter is a reference to the value
+to be validated. In this case, it is always assumed that the value was indeed
+present and the reference points to its value.
+
+In the second case, parameter C<$quiet> sets the quiet mode, i.e. nothing is
+printed on standard error even in case of warnings.
+
+The third case supports following keys:
+
+=over
+
+=item C<ref_value>
+
+a reference to the value, much like C<\$value> above. Its I<absence> means
+that the value was not present
+
+=item C<quiet>
+
+a boolean value like C<$quiet> above.
+
+=back
+
+This is the only invocation style that allows you to distinguish between
+an absent parameter and an C<undef>ined one.
+
 
 =head1 AUTHOR
 

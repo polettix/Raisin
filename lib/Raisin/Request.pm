@@ -24,16 +24,18 @@ sub prepare_params {
 
     foreach my $p (@$declared) {
         my $name = $p->name;
-        my $value = $params{$name};
 
-        if (not $p->validate(\$value)) {
+        # @args keeps arguments for validation
+        my @args = exists $params{$name}
+            ? (ref_value => \$params{$name}) : ();
+
+        if (not $p->validate(@args)) {
             $p->required ? return : next;
         }
+        next unless @args || $p->has_default;
 
-        $value //= $p->default if defined $p->default;
-        next if not defined($value);
-
-        $self->{'raisin.declared_params'}{$name} = $value;
+        $self->{'raisin.declared_params'}{$name} =
+            @args ? ${$args[1]} : $p->default;
     }
 
     1;

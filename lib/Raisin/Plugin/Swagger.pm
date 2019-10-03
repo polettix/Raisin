@@ -268,7 +268,7 @@ sub _parameters_object {
             required    => $p->required ? JSON::MaybeXS::true : JSON::MaybeXS::false,
             %$ptype,
         );
-        $param{default} = $p->default if defined $p->default;
+        $param{default} = $p->default if $p->has_default;
 
 
         push @obj, \%param;
